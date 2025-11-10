@@ -1,0 +1,17 @@
+[package]
+name = "sdms_lab_0"
+version = "0.2.0"
+edition = "2024"
+
+[lib]
+doctest = false
+
+[dependencies]
+thiserror = "2.0.17"
+criterion = "0.7.0"
+uuid = { version = "1.18.1", features = ["v4"] }
+rand = "0.9.2"
+
+[[bench]]
+name = "disk_manager_bench"
+harness = false

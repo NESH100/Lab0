@@ -1,0 +1,107 @@
+use crate::disk::*;
+use crate::{PAGE_SIZE, PageID};
+use std::{
+    collections::VecDeque,
+    fs::OpenOptions,
+    io::{self, Read, Seek, Write},
+};
+
+impl DiskManager {
+    /// Create a DiskManager to manage a database file on disk
+    ///
+    /// Always start with an empty file. Empty the file if it already exists.
+    /// `next_free` should start at `PageID(1)`
+    ///
+    /// # Errors
+    ///
+    /// Will return [`io::Error`] if opening `filename` returns an error.
+    pub fn new(filename: &str) -> Result<Self, io::Error> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(filename)?;
+
+        Ok(DiskManager {
+            file,
+            next_free: PageID(0),
+            free_list: VecDeque::new(),
+        })    
+    }
+
+    /// Get a PageID for a new page, either from the `free_list` or using `next_free`.
+    pub fn allocate(&mut self) -> PageID {
+        if let Some(page_id) = self.free_list.pop_front() {
+            page_id
+        } else {
+            let page_id = self.next_free;
+            self.next_free.0 += 1;
+            page_id
+        }
+    }
+
+    /// Mark the given page id as free
+    ///
+    /// This allows reusing the page id for new pages.
+    ///
+    /// # Errors
+    /// Returns [`DiskManagerError::InvalidPageID`] if `page_id` is not in the
+    /// interval of allocated pages or if the page is already on the free list.
+    pub fn free(&mut self, page_id: PageID) -> Result<(), DiskManagerError> {
+        if page_id.0 >= self.next_free.0 {
+            return Err(DiskManagerError::PageOutOfRange(page_id.0));
+        }
+        if self.free_list.contains(&page_id) {
+            return Err(DiskManagerError::PageAlreadyFree(page_id.0));
+        }
+
+        self.free_list.push_back(page_id);
+        Ok(())
+    }
+
+    /// Reads a page from the database file on disk
+    ///
+    /// PageID serves as an offset to the position of the page in the file.
+    ///
+    /// # Errors
+    /// - Returns [`DiskManagerError::InvalidPageID`] if `page_id` is not in the
+    ///   interval of allocated pages or if the page is on the free list.
+    /// - Return [`DiskManagerError::IOError`] if file operations return an [`io::Error`].
+    pub fn read(&mut self, page_id: PageID, buf: &mut RawPage) -> Result<(), DiskManagerError> {
+        let offset = (page_id.0 * PAGE_SIZE as u64) as u64;
+
+        if let Err(e) = self.file.seek(SeekFrom::Start(offset)) {
+            return Err(DiskManagerError::from(e));
+        }
+
+        if let Err(e) = self.file.read_exact(buf) {
+            return Err(DiskManagerError::from(e));
+        }
+
+        // If both succeeded, return Ok.
+        Ok(())
+    }
+
+    /// Writes page to the database file on disk
+    ///
+    /// PageID serves as an offset to the position of the page in the file.
+    /// Ensure all data is written to disk by calling fsync.
+    ///
+    /// # Errors
+    /// - Returns [`DiskManagerError::InvalidPageID`] if `page_id` is not in the
+    ///   interval of allocated pages or if the page is on the free list.
+    /// - Return [`DiskManagerError::IOError`] if file operations return an [`io::Error`].
+    pub fn write(&mut self, page_id: PageID, buf: &RawPage) -> Result<(), DiskManagerError> {
+        let offset = (page_id.0 * PAGE_SIZE as u64) as u64;
+
+        if let Err(e) = self.file.seek(SeekFrom::Start(offset)) {
+            return Err(DiskManagerError::from(e));
+        }
+
+        if let Err(e) = self.file.write_all(buf) {
+            return Err(DiskManagerError::from(e));
+        }
+
+        Ok(())
+    }
+}

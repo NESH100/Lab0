@@ -1,0 +1,59 @@
+stages:
+  - test_basic
+  - test_advanced
+  - test_benchmark
+
+variables:
+  GIT_STRATEGY: fetch
+
+run_basic_tests:
+  stage: test_basic
+  tags:
+    - sdms_project_0
+  only:
+    refs:
+      - main
+  script:
+    - echo "Running basic tests"
+    - find . -type f -exec sed -i '/#\s*\[\s*test\s*\]/d' {} \;
+    - find . -type f -exec sed -i '/print\|assert\|dbg!/s/^/\/\/ /g' {} \;
+    - cp -r /tmp/eval_dir/* . && rm -rf ./target && cp -a /target . && cp -a /Cargo.lock .
+    - (cargo test --offline --no-fail-fast "basic" || true) | tee test_basic.txt
+    - echo "Delivering Results"
+    - PROJECT_NAME="SDMS Lab 0 (Bonus)" python3 deliver.py basic test_basic.txt 7
+  timeout: 10 minutes
+
+run_advanced_tests:
+  stage: test_advanced
+  tags:
+    - sdms_project_0
+  only:
+    refs:
+      - main
+  script:
+    - echo "Running advanced tests"
+    - find . -type f -exec sed -i '/#\s*\[\s*test\s*\]/d' {} \;
+    - find . -type f -exec sed -i '/print\|assert\|dbg!/s/^/\/\/ /g' {} \;
+    - cp -r /tmp/eval_dir/* . && rm -rf ./target && cp -a /target . && cp -a /Cargo.lock .
+    - (cargo test --offline --no-fail-fast "advanced" || true) | tee test_advanced.txt
+    - echo "Delivering Results"
+    - PROJECT_NAME="SDMS Lab 0 (Bonus)" python3 deliver.py advanced test_advanced.txt 13
+  timeout: 10 minutes
+  when: always
+
+run_benchmark:
+  stage: test_benchmark
+  tags:
+    - sdms_project_0
+  only:
+    refs:
+      - main
+  script:
+    - echo "Running benchmark"
+    - find . -type f -exec sed -i '/#\s*\[\s*test\s*\]/d' {} \;
+    - find . -type f -exec sed -i '/print\|assert\|dbg!/s/^/\/\/ /g' {} \;
+    - cp -r /tmp/eval_dir/* . && rm -rf ./target && cp -a /target . && cp -a /Cargo.lock .
+    - cargo bench --offline --no-fail-fast --bench "disk_manager_bench"
+    - echo "Delivering Results"
+    - PROJECT_NAME="SDMS Lab 0 (Bonus)" python3 deliver.py benchmark alloc_free_rand
+  timeout: 10 minutes
